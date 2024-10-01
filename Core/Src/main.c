@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
+#include "usbd_cdc_if.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -44,6 +45,10 @@
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+uint8_t Buffer1[128];
+volatile uint8_t Tx1 = 0;
+volatile uint8_t Rx1 = 0;
+volatile uint8_t Empty1 = 1;
 
 /* USER CODE END PV */
 
@@ -57,6 +62,19 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == &huart1) {
+    if (++Rx1 == sizeof(Buffer1)) Rx1 = 0;
+    Empty1 = 0;
+    HAL_UART_Receive_IT(&huart1, &Buffer1[Rx1], 1);
+  }
+}
+
+void USB_CDC_RxHandler(uint8_t* Buf, uint32_t Len)
+{
+    HAL_UART_Transmit(&huart1, Buf, Len, 1000);
+}
 
 /* USER CODE END 0 */
 
@@ -92,15 +110,22 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_UART_Receive_IT(&huart1, &Buffer1[Rx1], 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    uint8_t Rx;
     /* USER CODE END WHILE */
-
+    if (!Empty1 && (Rx = Rx1) != Tx1) {
+       uint8_t Tx = Rx > Tx1 ? Rx : sizeof(Buffer1);
+       uint8_t Len = Tx - Tx1;
+       if (CDC_Transmit_FS (&Buffer1[Tx1], Len) == USBD_OK) {
+          Tx1 = Tx == sizeof(Buffer1) ? 0 : Tx;
+       }
+    }
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
